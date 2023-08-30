@@ -4,17 +4,36 @@ function Configure-DockerHost {
         [string[]]$workerNodeIPs
     )
     
-    # Install Hyper-V feature
-    Write-Host "Installing Hyper-V feature on Manager Node ($managerNodeIP)..."
-    Invoke-Command -ComputerName $managerNodeIP -ScriptBlock {
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+    # Check if Hyper-V feature is enabled
+    $hyperVEnabled = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All | Select-Object -ExpandProperty State
+    if ($hyperVEnabled -eq "Enabled") {
+        Write-Host "Hyper-V is already enabled on Manager Node ($managerNodeIP)."
+    } else {
+        Write-Host "Enabling Hyper-V feature on Manager Node ($managerNodeIP)..."
+        try {
+            Invoke-Command -ComputerName $managerNodeIP -ScriptBlock {
+                Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+            }
+            Write-Host "Hyper-V enabled on Manager Node."
+        } catch {
+            Write-Host "Failed to enable Hyper-V on Manager Node. Error: $_"
+        }
     }
-    Write-Host "Hyper-V installed on Manager Node."
 
-    # Install Windows Containers feature
-    Write-Host "Installing Windows Containers feature on Manager Node ($managerNodeIP)..."
-    Invoke-Command -ComputerName $managerNodeIP -ScriptBlock {
-        Enable-WindowsOptionalFeature -Online -FeatureName Containers
+    # Check if Windows Containers feature is enabled
+    $containersEnabled = Get-WindowsOptionalFeature -Online -FeatureName Containers -All | Select-Object -ExpandProperty State
+    if ($containersEnabled -eq "Enabled") {
+        Write-Host "Windows Containers feature is already enabled on Manager Node ($managerNodeIP)."
+    } else {
+        Write-Host "Enabling Windows Containers feature on Manager Node ($managerNodeIP)..."
+        try {
+            Invoke-Command -ComputerName $managerNodeIP -ScriptBlock {
+                Enable-WindowsOptionalFeature -Online -FeatureName Containers
+            }
+            Write-Host "Windows Containers enabled on Manager Node."
+        } catch {
+            Write-Host "Failed to enable Windows Containers on Manager Node. Error: $_"
+        }
     }
     Write-Host "Windows Containers installed on Manager Node."
 
@@ -27,14 +46,13 @@ function Configure-DockerHost {
     )
     foreach ($port in $allowedPorts) {
         $firewallRuleName = "DockerSwarmPort_$port"
-        $firewallRuleScriptBlock = "netsh advfirewall firewall add rule name='$firewallRuleName' dir=in action=allow protocol=TCP localport=$port"
-        Invoke-Command -ComputerName $managerNodeIP -ScriptBlock $firewallRuleScriptBlock
+        Invoke-Command -ComputerName $managerNodeIP -ScriptBlock {netsh advfirewall firewall add rule name='$firewallRuleName' dir=in action=allow protocol=TCP localport=$port}
     }
     Write-Host "Docker Swarm ports opened in the firewall on Manager Node."
 
     # Enable IPv4 pings
     Write-Host "Enabling IPv4 pings on Manager Node ($managerNodeIP)..."
-    $icmpRuleScriptBlock = "New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4"
+    $icmpRuleScriptBlock = New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4
     Invoke-Command -ComputerName $managerNodeIP -ScriptBlock $icmpRuleScriptBlock
     Write-Host "IPv4 pings enabled on Manager Node."
 
@@ -65,14 +83,13 @@ function Configure-DockerHost {
         )
         foreach ($port in $allowedPorts) {
             $firewallRuleName = "DockerSwarmPort_$port"
-            $firewallRuleScriptBlock = "netsh advfirewall firewall add rule name='$firewallRuleName' dir=in action=allow protocol=TCP localport=$port"
-            Invoke-Command -ComputerName $workerNodeIP -ScriptBlock $firewallRuleScriptBlock
+            Invoke-Command -ComputerName $workerNodeIP -ScriptBlock {netsh advfirewall firewall add rule name='$firewallRuleName' dir=in action=allow protocol=TCP localport=$port}
         }
         Write-Host "Docker Swarm ports opened in the firewall on Manager Node."
 
         # Enable IPv4 pings
         Write-Host "Enabling IPv4 pings on Manager Node ($workerNodeIP)..."
-        $icmpRuleScriptBlock = "New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4"
+        $icmpRuleScriptBlock = New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4
         Invoke-Command -ComputerName $workerNodeIP -ScriptBlock $icmpRuleScriptBlock
         Write-Host "IPv4 pings enabled on Manager Node."
 
